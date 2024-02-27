@@ -340,5 +340,114 @@ class TestApartmentOwnership(TestApiBase):
         self.assertEqual(ReturnValue.NOT_EXISTS, Solution.owner_drops_apartment(3, 5), 'owner does not exist')
 
 
+class TestApartmentOwnerRating(TestApiBase):
+
+    def test_apartment_owner_rating(self):
+        customers = self.add_customers(customers_count=2)
+        owners = self.add_owners(owners_count=2+1)
+        apartments = self.add_apartemnts(apartments_count=2+1)
+
+        for owner, apartment in zip(owners[:2], apartments):
+            self.assertEqual(ReturnValue.OK, Solution.owner_owns_apartment(owner.get_owner_id(), apartment.get_id()), 'valid ownership')
+
+        for customer in customers:
+            start_date = date(year=2024, month=customer.get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+
+            for apartment in apartments[:2]:
+                reservation_args = (customer.get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+                self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+                review_args = (customer.get_customer_id(), apartment.get_id(), end_date, customer.get_customer_id(), "review text")
+                self.assertEqual(ReturnValue.OK, Solution.customer_reviewed_apartment(*review_args), 'valid review')
+
+        for apartment in apartments[:2]:
+            self.assertEqual(1.5, Solution.get_apartment_rating(apartment.get_id()))
+
+        self.assertEqual(0, Solution.get_apartment_rating(4))  # apartment does not exist
+
+        for owner in owners[:2]:
+            self.assertEqual(1.5, Solution.get_owner_rating(owner.get_owner_id()))
+
+        self.assertEqual(0, Solution.get_owner_rating(4))  # owner does not exist
+        self.assertEqual(0, Solution.get_owner_rating(3))  # owner has no apartments
+
+        self.assertEqual(ReturnValue.OK, Solution.owner_owns_apartment(owners[-1].get_owner_id(), apartments[-1].get_id()), 'valid ownership')
+        self.assertEqual(0, Solution.get_owner_rating(3))  # owner has apartment without reviews
+
+
+class TestTopCustomer(TestApiBase):
+
+    def test_top_customer(self):
+        self.assertEqual(Customer.bad_customer(), Solution.get_top_customer())  # no customers
+
+        customers = self.add_customers(customers_count=10+1)
+        apartments = self.add_apartemnts(apartments_count=10+1)
+
+        self.assertEqual(Customer.bad_customer(), Solution.get_top_customer())  # customers exist but not reservations
+
+        # customer i will make i reservations (for apartments 1 to i)
+
+        for customer in customers[:10]:
+            start_date = date(year=2024, month=customer.get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+
+            for apartment in apartments[:customer.get_customer_id()]:
+                reservation_args = (customer.get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+                self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+        self.assertEqual(customers[-2], Solution.get_top_customer())  # customer 10 has most reservations (10)
+
+        # add customer 11 reservations for all apartments (10) to tie with customer 10
+        for apartment in apartments[:10]:
+            start_date = date(year=2024, month=customers[-1].get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+            reservation_args = (customers[-1].get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+            self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+        self.assertEqual(customers[-2], Solution.get_top_customer())  # customer 10 and 11 have most reservations (10) but 10 has lower id
+
+        # add customer 11 another reservation to make him top customer
+        start_date = date(year=2024, month=customers[-1].get_customer_id(), day=1)
+        end_date = start_date.replace(day=10)
+        reservation_args = (customers[-1].get_customer_id(), apartments[-1].get_id(), start_date, end_date, 100)
+        self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+        self.assertEqual(customers[-1], Solution.get_top_customer())  # customer 11 has most reservations (11)
+
+
+class TestReservationsPerOwner(TestApiBase):
+
+    def test_reservation_per_owner(self):
+        customers = self.add_customers(customers_count=4)
+        owners = self.add_owners(owners_count=2+1)
+        apartments = self.add_apartemnts(apartments_count=2+1)
+
+        for owner, apartment in zip(owners[:2], apartments[:2]):
+            self.assertEqual(ReturnValue.OK, Solution.owner_owns_apartment(owner.get_owner_id(), apartment.get_id()), 'valid ownership')
+
+        for customer in customers:
+            start_date = date(year=2024, month=customer.get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+
+            for apartment in apartments[:2]:
+                reservation_args = (customer.get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+                self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+        expected_reservations_per_owner = [(owner.get_owner_name(), 4) for owner in owners[:2]]\
+            + [(owners[-1].get_owner_name(), 0)]
+        # owner 3 has no apartments
+        self.assertEqual(set(expected_reservations_per_owner), set(Solution.reservations_per_owner()))
+
+        self.assertEqual(ReturnValue.OK, Solution.owner_owns_apartment(owners[-1].get_owner_id(), apartments[-1].get_id()), 'valid ownership')
+        # owner 3 now has an apartment w/o reservations
+        self.assertEqual(set(expected_reservations_per_owner), set(Solution.reservations_per_owner()))
+
+        same_name_owner = Owner(owner_id=4, owner_name="owner 1")
+        Solution.add_owner(same_name_owner)
+        # owners 1 and 4 have the same name => will have ("owner 1", owner 1 count + owner 4 count = 4 + 0) in list
+        self.assertEqual(set(expected_reservations_per_owner), set(Solution.reservations_per_owner()))
+
+
 if __name__ == '__main__':
     unittest.main(verbosity=2, exit=False)

@@ -89,7 +89,11 @@ def create_tables():
                     "FOREIGN KEY (customer_id) REFERENCES Customer(id) ON DELETE CASCADE, " \
                     "FOREIGN KEY (apartment_id) REFERENCES Apartment(id) ON DELETE CASCADE);"
 
-    query = owner_table + customer_table + apartment_table + owned_by_table + reservations_table + reviews_table
+    apartment_rating_view = "CREATE VIEW ApartmentRating AS " \
+                            "SELECT apartment_id, AVG(rating) AS average_rating FROM Reviews GROUP BY apartment_id;"
+
+    query = owner_table + customer_table + apartment_table + owned_by_table + reservations_table + reviews_table \
+        + apartment_rating_view
 
     run_query(query)
 
@@ -375,23 +379,72 @@ def get_owner_apartments(owner_id: int) -> List[Apartment]:
 # ---------------------------------- BASIC API: ----------------------------------
 
 def get_apartment_rating(apartment_id: int) -> float:
-    # TODO: implement
-    pass
+    if apartment_id <= 0:
+        return 0
+
+    query = sql.SQL("SELECT average_rating FROM ApartmentRating WHERE apartment_id={0}") \
+        .format(sql.Literal(apartment_id))
+
+    num_rows_effected, entries, return_val = run_query(query)
+
+    if num_rows_effected == 0:  # apartment id does not exist / does not have reviews
+        return 0
+
+    entry = entries[0]  # expect 1 row for the apartment
+
+    return entry['average_rating']
 
 
 def get_owner_rating(owner_id: int) -> float:
-    # TODO: implement
-    pass
+    if owner_id <= 0:
+        return 0
+
+    query = sql.SQL("SELECT AVG(average_rating) AS owner_rating FROM ApartmentRating "
+                    "WHERE apartment_id IN (SELECT apartment_id FROM OwnedBy WHERE owner_id={0})") \
+        .format(sql.Literal(owner_id))
+
+    num_rows_effected, entries, return_val = run_query(query)
+
+    if num_rows_effected == 0:
+        return 0
+
+    entry = entries[0]  # expect 1 row for the owner
+
+    # abg return NULL (None) if owner id doesn't exist / doesn't own apartments / doesn't own apartments with reviews
+    return entry['owner_rating'] if entry['owner_rating'] is not None else 0
 
 
 def get_top_customer() -> Customer:
-    # TODO: implement
-    pass
+    query = sql.SQL("SELECT * FROM Customer "
+                    "WHERE id IN "
+                    "(SELECT customer_id FROM Reservations GROUP BY customer_id "
+                    " ORDER BY COUNT(*) DESC, customer_id LIMIT 1)")
+
+    num_rows_effected, entries, return_val = run_query(query)
+
+    if num_rows_effected == 0:  # there are no reservations
+        return Customer.bad_customer()
+
+    entry = entries[0]  # expect 1 row for the top customer
+
+    return Customer(customer_id=entry['id'], customer_name=entry['name'])
 
 
 def reservations_per_owner() -> List[Tuple[str, int]]:
-    # TODO: implement
-    pass
+    query = sql.SQL("SELECT name, COALESCE(SUM(apartment_reservation_count), 0) AS reservations_per_owner "
+                    "FROM ("
+                    "(Owner LEFT OUTER JOIN OwnedBy ON Owner.id = OwnedBy.owner_id) AS OwnerApartments "
+                    "LEFT OUTER JOIN "
+                    "(SELECT apartment_id, COUNT(*) AS apartment_reservation_count "
+                    " FROM Reservations "
+                    " GROUP BY apartment_id) AS ReservationsPerApartment "
+                    " ON OwnerApartments.apartment_id = ReservationsPerApartment.apartment_id"
+                    ") "
+                    "GROUP BY name")
+
+    num_rows_effected, entries, return_val = run_query(query)
+
+    return [(entry['name'], entry['reservations_per_owner']) for entry in entries]
 
 
 # ---------------------------------- ADVANCED API: ----------------------------------

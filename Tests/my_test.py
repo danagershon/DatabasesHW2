@@ -448,6 +448,25 @@ class TestReservationsPerOwner(TestApiBase):
         # owners 1 and 4 have the same name => will have ("owner 1", owner 1 count + owner 4 count = 4 + 0) in list
         self.assertEqual(set(expected_reservations_per_owner), set(Solution.reservations_per_owner()))
 
+class TestGetAllLocationOwners(TestApiBase):
+    def testGetAllLocationOwners_whenOneOwnersHasAllApartment_shouldReturnOwner(self):
+        #arrange
+        owners = self.add_owners(owners_count=3)
+        apartments = self.add_apartemnts(apartments_count=3)
+        for apartment in apartments:
+            Solution.owner_owns_apartment(owner_id=1, apartment_id=apartment.get_id())
+
+        #act
+        allLocationOwners = Solution.get_all_location_owners()
+
+        assert len(allLocationOwners) == 1
+        assert allLocationOwners[0].__eq__(owners[0])
+
+
+
+
+
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, exit=False)

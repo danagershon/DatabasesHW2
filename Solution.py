@@ -92,8 +92,14 @@ def create_tables():
     apartment_rating_view = "CREATE VIEW ApartmentRating AS " \
                             "SELECT apartment_id, AVG(rating) AS average_rating FROM Reviews GROUP BY apartment_id;"
 
+    values_for_money_view = '''CREATE VIEW valueForMoney as
+                            SELECT AVG(average_rating)/(SUM(total_price)/SUM((reservations.end_date - reservations.start_date))) as ratio, reservations.apartment_id as id 
+                            FROM reservations INNER JOIN ApartmentRating
+                            ON reservations.apartment_id = ApartmentRating.apartment_id
+                            GROUP BY reservations.apartment_id;'''
+
     query = owner_table + customer_table + apartment_table + owned_by_table + reservations_table + reviews_table \
-        + apartment_rating_view
+        + apartment_rating_view + values_for_money_view
 
     run_query(query)
 
@@ -450,13 +456,24 @@ def reservations_per_owner() -> List[Tuple[str, int]]:
 # ---------------------------------- ADVANCED API: ----------------------------------
 
 def get_all_location_owners() -> List[Owner]:
-    # TODO: implement
-    pass
+    query = sql.SQL('''SELECT owner.id ,owner.name, COUNT(DISTINCT city) as cityCount
+                    FROM owner 
+                        INNER JOIN ownedby ob
+                        ON owner.id = ob.owner_id
+                        INNER JOIN apartment a
+                        ON ob.apartment_id = a.id
+                    GROUP BY owner.id
+                        HAVING COUNT(DISTINCT city) in (SELECT COUNT(DISTINCT city) FROM apartment)''')
+    num_rows_effected, entries, return_val = run_query(query)
+
+    return [Owner(entry['id'], entry['name']) for entry in entries]
 
 
 def best_value_for_money() -> Apartment:
-    # TODO: implement
-    pass
+    query = sql.SQL('''SELECT id FROM valueformoney
+    where ratio = (SELECT MAX(ratio) FROM valueformoney)''')
+    num_rows_effected, entries, return_val = run_query(query)
+    return get_apartment(entries[0])
 
 
 def profit_per_month(year: int) -> List[Tuple[int, float]]:
@@ -467,3 +484,40 @@ def profit_per_month(year: int) -> List[Tuple[int, float]]:
 def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, float]]:
     # TODO: implement
     pass
+
+
+if __name__ == '__main__':
+    def add_owners(self, owners_count):
+        owners = []
+
+        for i in range(owners_count):
+            owner_id = i + 1
+            owner = Owner(owner_id=owner_id, owner_name="owner " + str(owner_id))
+            add_owner(owner)
+            owners.append(owner)
+
+        return owners
+
+    def add_customers(self, customers_count):
+        customers = []
+
+        for i in range(customers_count):
+            customer_id = i + 1
+            customer = Customer(customer_id=customer_id, customer_name="customer " + str(customer_id))
+            add_customer(customer)
+            customers.append(customer)
+
+        return customers
+
+    def add_apartemnts(self, apartments_count):
+        apartments = []
+
+        for i in range(apartments_count):
+            apartment_id = i + 1
+            apartment = Apartment(id=apartment_id, address="address " + str(apartment_id),
+                                  city="city " + str(apartment_id), country="country " + str(apartment_id),
+                                  size=apartment_id*100)
+            add_apartment(apartment)
+            apartments.append(apartment)
+
+        return apartments

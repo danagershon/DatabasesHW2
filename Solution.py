@@ -489,7 +489,21 @@ def profit_per_month(year: int) -> List[Tuple[int, float]]:
     return [(entry['month'], entry['profit']) for entry in entries]
 
 def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, float]]:
-    # TODO: implement
-    pass
+    query = sql.SQL('''SELECT * FROM 
+                        apartment JOIN
+                        (SELECT AVG(ratio.review_ratio*reviews.rating) as aproximatedRating, reviews.apartment_id as apartment_id
+                        FROM reviews JOIN 
+                        (SELECT O.customer_id, AVG(C.rating / O.rating) as review_ratio
+                        FROM (SELECT * FROM reviews WHERE  customer_id = 1) as C 
+                        JOIN reviews as O
+                        ON O.apartment_id = C.apartment_id AND O.customer_id != 1
+                        GROUP BY O.customer_id) as ratio
+                        ON reviews.customer_id= ratio.customer_id 
+                        WHERE reviews.apartment_id NOT IN (SELECT apartment_id FROM reviews WHERE  customer_id = 1)
+                        GROUP BY reviews.apartment_id) as T
+                        ON T.apartment_id = apartment.id'''.format(id=customer_id))
+    _, entries, _ = run_query(query)
+    return [(Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size']), entry['aproximatedrating']) for entry in entries]
+
 
 

@@ -464,15 +464,17 @@ def get_all_location_owners() -> List[Owner]:
 
 
 def best_value_for_money() -> Apartment:
-    query = sql.SQL('''SELECT average_rating / T.average_cost  as ratio, T.apartment_id as apartment_id
-            FROM 
-            (SELECT apartment_id, AVG(total_price/(end_date - start_date)) as average_cost FROM reservations GROUP BY apartment_id) as T
+    query = sql.SQL('''SELECT * FROM apartment
+            WHERE id IN
+            (SELECT T.apartment_id as apartment_id
+            FROM (SELECT apartment_id, AVG(total_price/(end_date - start_date)) as average_cost FROM reservations GROUP BY apartment_id) as T
             INNER JOIN ApartmentRating
             ON T.apartment_id = ApartmentRating.apartment_id
-            ORDER BY ratio DESC, apartment_id ASC
-            LIMIT 1''')
-    num_rows_effected, entries, return_val = run_query(query)
-    return get_apartment(entries[0])
+            ORDER BY average_rating / T.average_cost DESC, apartment_id ASC
+            LIMIT 1)''')
+    _, entries, _ = run_query(query)
+    entry = entries[0]
+    return Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size'])
 
 
 def profit_per_month(year: int) -> List[Tuple[int, float]]:

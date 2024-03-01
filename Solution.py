@@ -104,7 +104,8 @@ def clear_tables():
 
 
 def drop_tables():
-    query = "DROP TABLE IF EXISTS Owner, Customer, Apartment, OwnedBy, Reservations, Reviews CASCADE;"
+    query = "DROP TABLE IF EXISTS Owner, Customer, Apartment, OwnedBy, Reservations, Reviews CASCADE;" \
+            "DROP VIEW ApartmentRating, valueForMoney"
     run_query(query)
 
 
@@ -304,7 +305,7 @@ def customer_updated_review(customer_id: int, apartment_id: int, update_date: da
 
     query = sql.SQL("UPDATE Reviews "
                     "SET date={update_date}, rating={new_rating}, review_text={new_text} "
-                    "WHERE customer_id={customer_id} AND apartment_id={apartment_id} AND date < {update_date}") \
+                    "WHERE customer_id={customer_id} AND apartment_id={apartment_id} AND date <= {update_date}") \
         .format(update_date=sql.Literal(update_date), new_rating=sql.Literal(new_rating),
                 new_text=sql.Literal(new_text), customer_id=sql.Literal(customer_id),
                 apartment_id=sql.Literal(apartment_id))
@@ -487,6 +488,7 @@ def profit_per_month(year: int) -> List[Tuple[int, float]]:
                 '''.format(year=year))
     num_rows_effected, entries, return_val = run_query(query)
     return [(entry['month'], entry['profit']) for entry in entries]
+
 
 def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, float]]:
     query = sql.SQL('''SELECT * FROM 

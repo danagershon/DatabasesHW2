@@ -92,14 +92,8 @@ def create_tables():
     apartment_rating_view = "CREATE VIEW ApartmentRating AS " \
                             "SELECT apartment_id, AVG(rating) AS average_rating FROM Reviews GROUP BY apartment_id;"
 
-    values_for_money_view = '''CREATE VIEW valueForMoney as
-                            SELECT AVG(average_rating)/(SUM(total_price)/SUM((reservations.end_date - reservations.start_date))) as ratio, reservations.apartment_id as id 
-                            FROM reservations INNER JOIN ApartmentRating
-                            ON reservations.apartment_id = ApartmentRating.apartment_id
-                            GROUP BY reservations.apartment_id;'''
-
     query = owner_table + customer_table + apartment_table + owned_by_table + reservations_table + reviews_table \
-        + apartment_rating_view + values_for_money_view
+        + apartment_rating_view
 
     run_query(query)
 
@@ -470,54 +464,30 @@ def get_all_location_owners() -> List[Owner]:
 
 
 def best_value_for_money() -> Apartment:
-    query = sql.SQL('''SELECT id FROM valueformoney
-    where ratio = (SELECT MAX(ratio) FROM valueformoney)''')
+    query = sql.SQL('''SELECT average_rating / T.average_cost  as ratio, T.apartment_id as apartment_id
+            FROM 
+            (SELECT apartment_id, AVG(total_price/(end_date - start_date)) as average_cost FROM reservations GROUP BY apartment_id) as T
+            INNER JOIN ApartmentRating
+            ON T.apartment_id = ApartmentRating.apartment_id
+            ORDER BY ratio DESC, apartment_id ASC
+            LIMIT 1''')
     num_rows_effected, entries, return_val = run_query(query)
     return get_apartment(entries[0])
 
 
 def profit_per_month(year: int) -> List[Tuple[int, float]]:
-    # TODO: implement
-    pass
-
+    query = sql.SQL('''SELECT  T2.month as month, 0.15 * SUM(CASE WHEN T.total_price IS NULL THEN 0 ELSE T.total_price END) as profit
+                FROM (SELECT total_price, EXTRACT(MONTH FROM DATE(end_date)) as month ,EXTRACT(YEAR FROM DATE(end_date))  as year FROM reservations WHERE EXTRACT(YEAR FROM DATE(end_date)) = {year}) as T
+                RIGHT OUTER JOIN (SELECT * FROM (VALUES (1), (2), (3), (4), (5),(6), (7), (8), (9), (10), (11), (12)) as t (month) ) T2
+                ON T.month = T2.month
+                GROUP BY T2.month
+                ORDER BY month ASC
+                '''.format(year=year))
+    num_rows_effected, entries, return_val = run_query(query)
+    return [(entry['month'], entry['profit']) for entry in entries]
 
 def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, float]]:
     # TODO: implement
     pass
 
 
-if __name__ == '__main__':
-    def add_owners(self, owners_count):
-        owners = []
-
-        for i in range(owners_count):
-            owner_id = i + 1
-            owner = Owner(owner_id=owner_id, owner_name="owner " + str(owner_id))
-            add_owner(owner)
-            owners.append(owner)
-
-        return owners
-
-    def add_customers(self, customers_count):
-        customers = []
-
-        for i in range(customers_count):
-            customer_id = i + 1
-            customer = Customer(customer_id=customer_id, customer_name="customer " + str(customer_id))
-            add_customer(customer)
-            customers.append(customer)
-
-        return customers
-
-    def add_apartemnts(self, apartments_count):
-        apartments = []
-
-        for i in range(apartments_count):
-            apartment_id = i + 1
-            apartment = Apartment(id=apartment_id, address="address " + str(apartment_id),
-                                  city="city " + str(apartment_id), country="country " + str(apartment_id),
-                                  size=apartment_id*100)
-            add_apartment(apartment)
-            apartments.append(apartment)
-
-        return apartments

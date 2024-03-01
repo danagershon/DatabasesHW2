@@ -450,14 +450,14 @@ def reservations_per_owner() -> List[Tuple[str, int]]:
 # ---------------------------------- ADVANCED API: ----------------------------------
 
 def get_all_location_owners() -> List[Owner]:
-    query = sql.SQL('''SELECT owner.id ,owner.name, COUNT(DISTINCT city) as cityCount
-                    FROM owner 
-                        INNER JOIN ownedby ob
-                        ON owner.id = ob.owner_id
-                        INNER JOIN apartment a
-                        ON ob.apartment_id = a.id
-                    GROUP BY owner.id
-                        HAVING COUNT(DISTINCT city) in (SELECT COUNT(DISTINCT city) FROM apartment)''')
+    query = sql.SQL('''SELECT owner.id ,owner.name, COUNT(DISTINCT (city, country)) as cityCount
+                        FROM owner 
+                            INNER JOIN ownedby ob
+                            ON owner.id = ob.owner_id
+                            INNER JOIN apartment a
+                            ON ob.apartment_id = a.id
+                        GROUP BY owner.id
+                            HAVING COUNT(DISTINCT (city, country)) in (SELECT COUNT(DISTINCT (city, country)) FROM apartment)''')
     num_rows_effected, entries, return_val = run_query(query)
 
     return [Owner(entry['id'], entry['name']) for entry in entries]

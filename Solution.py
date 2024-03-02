@@ -105,7 +105,7 @@ def clear_tables():
 
 def drop_tables():
     query = "DROP TABLE IF EXISTS Owner, Customer, Apartment, OwnedBy, Reservations, Reviews CASCADE;" \
-            "DROP VIEW ApartmentRating, valueForMoney"
+            "DROP VIEW IF EXISTS ApartmentRating CASCADE;"
     run_query(query)
 
 

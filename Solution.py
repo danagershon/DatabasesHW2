@@ -416,17 +416,17 @@ def get_owner_rating(owner_id: int) -> float:
 
 
 def get_top_customer() -> Customer:
-    query = sql.SQL("SELECT * FROM Customer "
-                    "WHERE id IN "
-                    "(SELECT customer_id FROM Reservations GROUP BY customer_id "
-                    " ORDER BY COUNT(*) DESC, customer_id LIMIT 1)")
+    query = sql.SQL("SELECT id, name "
+                    "FROM Customer LEFT OUTER JOIN Reservations ON Customer.id = Reservations.customer_id "
+                    "GROUP BY id "
+                    "ORDER BY COUNT(*) DESC, id ASC LIMIT 1")
 
     num_rows_effected, entries, return_val = run_query(query)
 
-    if num_rows_effected == 0:  # there are no reservations
+    if num_rows_effected == 0:  # there are no customers
         return Customer.bad_customer()
 
-    entry = entries[0]  # expect 1 row for the top customer
+    entry = entries[0]  # expect 1 row for the top customer, even if there are no reservations
 
     return Customer(customer_id=entry['id'], customer_name=entry['name'])
 
@@ -451,14 +451,14 @@ def reservations_per_owner() -> List[Tuple[str, int]]:
 # ---------------------------------- ADVANCED API: ----------------------------------
 
 def get_all_location_owners() -> List[Owner]:
-    query = sql.SQL('''SELECT owner.id ,owner.name, COUNT(DISTINCT city) as cityCount
+    query = sql.SQL('''SELECT owner.id ,owner.name
                     FROM owner 
                         INNER JOIN ownedby ob
                         ON owner.id = ob.owner_id
                         INNER JOIN apartment a
                         ON ob.apartment_id = a.id
                     GROUP BY owner.id
-                        HAVING COUNT(DISTINCT city) in (SELECT COUNT(DISTINCT city) FROM apartment)''')
+                        HAVING COUNT(DISTINCT (city, country)) in (SELECT COUNT(DISTINCT (city, country)) FROM apartment)''')
     num_rows_effected, entries, return_val = run_query(query)
 
     return [Owner(entry['id'], entry['name']) for entry in entries]

@@ -33,14 +33,15 @@ class TestApiBase(AbstractTest):
 
         return customers
 
-    def add_apartemnts(self, apartments_count):
+    def add_apartemnts(self, apartments_count, same_city=False):
         apartments = []
 
         for i in range(apartments_count):
             apartment_id = i + 1
-            apartment = Apartment(id=apartment_id, address="address " + str(apartment_id),
-                                  city="city " + str(apartment_id), country="country " + str(apartment_id),
-                                  size=apartment_id*100)
+            address = "address " + str(apartment_id)
+            city = "city " + (str(apartment_id) if not same_city else '')
+            country = "country " + (str(apartment_id) if not same_city else '')
+            apartment = Apartment(id=apartment_id, address=address, city=city, country=country, size=apartment_id*100)
             Solution.add_apartment(apartment)
             apartments.append(apartment)
 
@@ -384,7 +385,7 @@ class TestTopCustomer(TestApiBase):
         customers = self.add_customers(customers_count=10+1)
         apartments = self.add_apartemnts(apartments_count=10+1)
 
-        self.assertEqual(Customer.bad_customer(), Solution.get_top_customer())  # customers exist but not reservations
+        self.assertEqual(customers[0], Solution.get_top_customer())  # customers exist but not reservations
 
         # customer i will make i reservations (for apartments 1 to i)
 
@@ -448,6 +449,7 @@ class TestReservationsPerOwner(TestApiBase):
         # owners 1 and 4 have the same name => will have ("owner 1", owner 1 count + owner 4 count = 4 + 0) in list
         self.assertEqual(set(expected_reservations_per_owner), set(Solution.reservations_per_owner()))
 
+
 class TestGetAllLocationOwners(TestApiBase):
     def testGetAllLocationOwners_whenOneOwnersHasAllApartment_shouldReturnOwner(self):
         #arrange
@@ -463,9 +465,88 @@ class TestGetAllLocationOwners(TestApiBase):
         assert allLocationOwners[0].__eq__(owners[0])
 
 
+class TestGetAllLocationOwners2(TestApiBase):
+
+    def test_get_all_location_owners(self):
+        owners = self.add_owners(owners_count=2+1)
+        apartments = self.add_apartemnts(apartments_count=4, same_city=True)
+
+        for apartment in apartments[:2]:
+            self.assertEqual(ReturnValue.OK, Solution.owner_owns_apartment(owners[0].get_owner_id(), apartment.get_id()))
+
+        for apartment in apartments[2:]:
+            self.assertEqual(ReturnValue.OK, Solution.owner_owns_apartment(owners[1].get_owner_id(), apartment.get_id()))
+
+        all_location_owners = Solution.get_all_location_owners()
+        self.assertEqual(all_location_owners, owners[:2])
+
+        # case of no owners / no owned apartments will not be tested
 
 
+class TestBestValueForMoney(TestApiBase):
 
+    def test_best_value_for_money(self):
+        customers = self.add_customers(customers_count=2)
+        apartments = self.add_apartemnts(apartments_count=2)
+
+        for customer in customers:
+            start_date = date(year=2024, month=customer.get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+
+            for apartment in apartments:
+                reservation_args = (customer.get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+                self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+                review_args = (customer.get_customer_id(), apartment.get_id(), end_date, apartment.get_id() * 2, "review text")
+                self.assertEqual(ReturnValue.OK, Solution.customer_reviewed_apartment(*review_args), 'valid review')
+
+        self.assertEqual(apartments[-1], Solution.best_value_for_money())
+
+
+class TestProfitPerYear(TestApiBase):
+
+    def test_profit_per_year(self):
+        customers = self.add_customers(customers_count=2)
+        apartments = self.add_apartemnts(apartments_count=2)
+
+        for customer in customers:
+            start_date = date(year=2024, month=customer.get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+
+            for apartment in apartments:
+                reservation_args = (customer.get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+                self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+        expected_profit = [(1, 0.15 * 200), (2, 0.15 * 200)] + [(month, 0.0) for month in range(3, 12+1)]
+        self.assertEqual(expected_profit, Solution.profit_per_month(2024))
+
+
+class TestGetApartmentRecommendation(TestApiBase):
+
+    def test_get_apartment_recommendation(self):
+        customers = self.add_customers(customers_count=2)
+        apartments = self.add_apartemnts(apartments_count=2)
+
+        start_date = date(year=2024, month=customers[0].get_customer_id(), day=1)
+        end_date = start_date.replace(day=10)
+
+        reservation_args = (customers[0].get_customer_id(), apartments[0].get_id(), start_date, end_date, 100)
+        self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+        review_args = (customers[0].get_customer_id(), apartments[0].get_id(), end_date, 6, "review text")
+        self.assertEqual(ReturnValue.OK, Solution.customer_reviewed_apartment(*review_args), 'valid review')
+
+        for apartment in apartments:
+            start_date = date(year=2024, month=customers[1].get_customer_id(), day=1)
+            end_date = start_date.replace(day=10)
+
+            reservation_args = (customers[1].get_customer_id(), apartment.get_id(), start_date, end_date, 100)
+            self.assertEqual(ReturnValue.OK, Solution.customer_made_reservation(*reservation_args), 'valid reservation')
+
+            review_args = (customers[1].get_customer_id(), apartment.get_id(), end_date, 3 if apartment.get_id() == 1 else 2, "review text")
+            self.assertEqual(ReturnValue.OK, Solution.customer_reviewed_apartment(*review_args), 'valid review')
+
+        self.assertEqual([(apartments[1], 4.0)], Solution.get_apartment_recommendation(customers[0].get_customer_id()))
 
 
 if __name__ == '__main__':

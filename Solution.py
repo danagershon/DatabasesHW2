@@ -76,7 +76,7 @@ def create_tables():
                          "total_price FLOAT(2) NOT NULL CHECK (total_price > 0), " \
                          "PRIMARY KEY (customer_id, apartment_id, start_date), " \
                          "FOREIGN KEY (customer_id) REFERENCES Customer(id) ON DELETE CASCADE, " \
-                         "FOREIGN KEY (apartment_id) REFERENCES Customer(id) ON DELETE CASCADE," \
+                         "FOREIGN KEY (apartment_id) REFERENCES Apartment(id) ON DELETE CASCADE," \
                          "CHECK (start_date < end_date));"
 
     reviews_table = "CREATE TABLE Reviews(" \

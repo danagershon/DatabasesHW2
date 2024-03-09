@@ -76,7 +76,7 @@ def create_tables():
                          "total_price FLOAT(2) NOT NULL CHECK (total_price > 0), " \
                          "PRIMARY KEY (customer_id, apartment_id, start_date), " \
                          "FOREIGN KEY (customer_id) REFERENCES Customer(id) ON DELETE CASCADE, " \
-                         "FOREIGN KEY (apartment_id) REFERENCES Customer(id) ON DELETE CASCADE," \
+                         "FOREIGN KEY (apartment_id) REFERENCES Apartment(id) ON DELETE CASCADE," \
                          "CHECK (start_date < end_date));"
 
     reviews_table = "CREATE TABLE Reviews(" \
@@ -104,7 +104,8 @@ def clear_tables():
 
 
 def drop_tables():
-    query = "DROP TABLE IF EXISTS Owner, Customer, Apartment, OwnedBy, Reservations, Reviews CASCADE;"
+    query = "DROP TABLE IF EXISTS Owner, Customer, Apartment, OwnedBy, Reservations, Reviews CASCADE;" \
+            "DROP VIEW IF EXISTS ApartmentRating CASCADE;"
     run_query(query)
 
 
@@ -304,7 +305,7 @@ def customer_updated_review(customer_id: int, apartment_id: int, update_date: da
 
     query = sql.SQL("UPDATE Reviews "
                     "SET date={update_date}, rating={new_rating}, review_text={new_text} "
-                    "WHERE customer_id={customer_id} AND apartment_id={apartment_id} AND date < {update_date}") \
+                    "WHERE customer_id={customer_id} AND apartment_id={apartment_id} AND date <= {update_date}") \
         .format(update_date=sql.Literal(update_date), new_rating=sql.Literal(new_rating),
                 new_text=sql.Literal(new_text), customer_id=sql.Literal(customer_id),
                 apartment_id=sql.Literal(apartment_id))
@@ -415,17 +416,17 @@ def get_owner_rating(owner_id: int) -> float:
 
 
 def get_top_customer() -> Customer:
-    query = sql.SQL("SELECT * FROM Customer "
-                    "WHERE id IN "
-                    "(SELECT customer_id FROM Reservations GROUP BY customer_id "
-                    " ORDER BY COUNT(*) DESC, customer_id LIMIT 1)")
+    query = sql.SQL("SELECT id, name "
+                    "FROM Customer LEFT OUTER JOIN Reservations ON Customer.id = Reservations.customer_id "
+                    "GROUP BY id "
+                    "ORDER BY COUNT(*) DESC, id ASC LIMIT 1")
 
     num_rows_effected, entries, return_val = run_query(query)
 
-    if num_rows_effected == 0:  # there are no reservations
+    if num_rows_effected == 0:  # there are no customers
         return Customer.bad_customer()
 
-    entry = entries[0]  # expect 1 row for the top customer
+    entry = entries[0]  # expect 1 row for the top customer, even if there are no reservations
 
     return Customer(customer_id=entry['id'], customer_name=entry['name'])
 
@@ -450,14 +451,14 @@ def reservations_per_owner() -> List[Tuple[str, int]]:
 # ---------------------------------- ADVANCED API: ----------------------------------
 
 def get_all_location_owners() -> List[Owner]:
-    query = sql.SQL('''SELECT owner.id ,owner.name, COUNT(DISTINCT (city, country)) as cityCount
-                        FROM owner 
-                            INNER JOIN ownedby ob
-                            ON owner.id = ob.owner_id
-                            INNER JOIN apartment a
-                            ON ob.apartment_id = a.id
-                        GROUP BY owner.id
-                            HAVING COUNT(DISTINCT (city, country)) in (SELECT COUNT(DISTINCT (city, country)) FROM apartment)''')
+    query = sql.SQL('''SELECT owner.id ,owner.name
+                    FROM owner 
+                        INNER JOIN ownedby ob
+                        ON owner.id = ob.owner_id
+                        INNER JOIN apartment a
+                        ON ob.apartment_id = a.id
+                    GROUP BY owner.id
+                        HAVING COUNT(DISTINCT (city, country)) in (SELECT COUNT(DISTINCT (city, country)) FROM apartment)''')
     num_rows_effected, entries, return_val = run_query(query)
 
     return [Owner(entry['id'], entry['name']) for entry in entries]
@@ -487,6 +488,7 @@ def profit_per_month(year: int) -> List[Tuple[int, float]]:
                 '''.format(year=year))
     num_rows_effected, entries, return_val = run_query(query)
     return [(entry['month'], entry['profit']) for entry in entries]
+
 
 def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, float]]:
     query = sql.SQL('''SELECT * FROM 

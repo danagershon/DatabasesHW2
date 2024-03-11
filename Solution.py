@@ -91,7 +91,7 @@ def create_tables():
 
     apartment_rating_view = "CREATE VIEW ApartmentRating AS " \
                             "SELECT apartment_id, AVG(rating) AS average_rating FROM Reviews GROUP BY apartment_id;"
-    rating_raio_view = '''CREATE VIEW rating_ratio AS SELECT AVG(to_customer.rating::float/from_customer.rating::float) as rating_ratio, from_customer.customer_id as "from_customer", to_customer.customer_id as "to_customer" FROM
+    rating_ratio_view = '''CREATE VIEW rating_ratio AS SELECT AVG(to_customer.rating::float/from_customer.rating::float) as rating_ratio, from_customer.customer_id as "from_customer", to_customer.customer_id as "to_customer" FROM
                         reviews as from_customer
                         JOIN reviews as to_customer
                         ON from_customer.apartment_id = to_customer.apartment_id AND from_customer.customer_id != to_customer.customer_id
@@ -99,7 +99,7 @@ def create_tables():
                         GROUP BY  from_customer.customer_id, to_customer.customer_id'''
 
     query = owner_table + customer_table + apartment_table + owned_by_table + reservations_table + reviews_table \
-        + apartment_rating_view +rating_raio_view
+        + apartment_rating_view +rating_ratio_view
 
     run_query(query)
 
@@ -471,9 +471,8 @@ def get_all_location_owners() -> List[Owner]:
 
 
 def best_value_for_money() -> Apartment:
-    query = sql.SQL('''SELECT * FROM apartment 
-            WHERE id IN
-			(SELECT id  FROM apartment
+    query = sql.SQL('''
+    SELECT * FROM apartment
             LEFT OUTER JOIN
             (SELECT T.apartment_id as id, average_rating / T.average_cost as value_for_money
             FROM (SELECT apartment_id, AVG(total_price/(end_date - start_date)) as average_cost FROM reservations GROUP BY apartment_id) as T
@@ -481,7 +480,7 @@ def best_value_for_money() -> Apartment:
             USING(apartment_id)) as vfm
 			USING(id)
 			ORDER BY COALESCE(value_for_money, 0 ) DESC, id ASC
-			LIMIT 1)''')
+			LIMIT 1''')
     num_rows_effected, entries, return_val = run_query(query)
     entry = entries[0]
     return Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size'])

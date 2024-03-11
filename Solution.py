@@ -91,9 +91,15 @@ def create_tables():
 
     apartment_rating_view = "CREATE VIEW ApartmentRating AS " \
                             "SELECT apartment_id, AVG(rating) AS average_rating FROM Reviews GROUP BY apartment_id;"
+    rating_raio_view = '''CREATE VIEW rating_ratio AS SELECT AVG(to_customer.rating::float/from_customer.rating::float) as rating_ratio, from_customer.customer_id as "from_customer", to_customer.customer_id as "to_customer" FROM
+                        reviews as from_customer
+                        JOIN reviews as to_customer
+                        ON from_customer.apartment_id = to_customer.apartment_id AND from_customer.customer_id != to_customer.customer_id
+                        WHERE from_customer.customer_id != to_customer.customer_id
+                        GROUP BY  from_customer.customer_id, to_customer.customer_id'''
 
     query = owner_table + customer_table + apartment_table + owned_by_table + reservations_table + reviews_table \
-        + apartment_rating_view
+        + apartment_rating_view +rating_raio_view
 
     run_query(query)
 
@@ -105,7 +111,7 @@ def clear_tables():
 
 def drop_tables():
     query = "DROP TABLE IF EXISTS Owner, Customer, Apartment, OwnedBy, Reservations, Reviews CASCADE;" \
-            "DROP VIEW IF EXISTS ApartmentRating CASCADE;"
+            "DROP VIEW IF EXISTS ApartmentRating, rating_ratio CASCADE;"
     run_query(query)
 
 
@@ -465,15 +471,18 @@ def get_all_location_owners() -> List[Owner]:
 
 
 def best_value_for_money() -> Apartment:
-    query = sql.SQL('''SELECT * FROM apartment
+    query = sql.SQL('''SELECT * FROM apartment 
             WHERE id IN
-            (SELECT T.apartment_id as apartment_id
+			(SELECT id  FROM apartment
+            LEFT OUTER JOIN
+            (SELECT T.apartment_id as id, average_rating / T.average_cost as value_for_money
             FROM (SELECT apartment_id, AVG(total_price/(end_date - start_date)) as average_cost FROM reservations GROUP BY apartment_id) as T
             INNER JOIN ApartmentRating
-            ON T.apartment_id = ApartmentRating.apartment_id
-            ORDER BY average_rating / T.average_cost DESC, apartment_id ASC
-            LIMIT 1)''')
-    _, entries, _ = run_query(query)
+            USING(apartment_id)) as vfm
+			USING(id)
+			ORDER BY COALESCE(value_for_money, 0 ) DESC, id ASC
+			LIMIT 1)''')
+    num_rows_effected, entries, return_val = run_query(query)
     entry = entries[0]
     return Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size'])
 
@@ -493,19 +502,21 @@ def profit_per_month(year: int) -> List[Tuple[int, float]]:
 def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, float]]:
     query = sql.SQL('''SELECT * FROM 
                         apartment JOIN
-                        (SELECT AVG(ratio.review_ratio*reviews.rating) as aproximatedRating, reviews.apartment_id as apartment_id
-                        FROM reviews JOIN 
-                        (SELECT O.customer_id, AVG(C.rating / O.rating) as review_ratio
-                        FROM (SELECT * FROM reviews WHERE  customer_id = 1) as C 
-                        JOIN reviews as O
-                        ON O.apartment_id = C.apartment_id AND O.customer_id != 1
-                        GROUP BY O.customer_id) as ratio
-                        ON reviews.customer_id= ratio.customer_id 
-                        WHERE reviews.apartment_id NOT IN (SELECT apartment_id FROM reviews WHERE  customer_id = 1)
-                        GROUP BY reviews.apartment_id) as T
-                        ON T.apartment_id = apartment.id'''.format(id=customer_id))
+                            (SELECT  
+                            others_reviews.apartment_id as "id", 
+                            AVG(CASE 
+                                WHEN others_reviews.rating*rating_ratio.rating_ratio > 10 THEN 10.0 
+                                WHEN others_reviews.rating*rating_ratio.rating_ratio < 1 THEN 1.0
+                                ELSE others_reviews.rating*rating_ratio.rating_ratio END) as "approx"
+                            FROM (SELECT * FROM reviews where customer_id!={id}) as others_reviews
+                            JOIN rating_ratio
+                            ON rating_ratio.from_customer = others_reviews.customer_id
+                            WHERE rating_ratio.to_customer = {id}
+                            GROUP BY others_reviews.apartment_id
+                            HAVING others_reviews.apartment_id NOT IN (SELECT apartment_id FROM reviews WHERE customer_id ={id})) as T
+                        USING(id)'''.format(id=customer_id))
     _, entries, _ = run_query(query)
-    return [(Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size']), entry['aproximatedrating']) for entry in entries]
+    return [(Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size']), float(entry['approx'])) for entry in entries]
 
 
 

@@ -508,12 +508,11 @@ def get_apartment_recommendation(customer_id: int) -> List[Tuple[Apartment, floa
                                 WHEN others_reviews.rating*rating_ratio.rating_ratio > 10 THEN 10.0 
                                 WHEN others_reviews.rating*rating_ratio.rating_ratio < 1 THEN 1.0
                                 ELSE others_reviews.rating*rating_ratio.rating_ratio END) as "approx"
-                            FROM (SELECT * FROM reviews where customer_id!={id}) as others_reviews
+                            FROM (SELECT * FROM reviews where apartment_id NOT IN (SELECT apartment_id FROM reviews WHERE customer_id ={id})) as others_reviews
                             JOIN rating_ratio
                             ON rating_ratio.from_customer = others_reviews.customer_id
                             WHERE rating_ratio.to_customer = {id}
-                            GROUP BY others_reviews.apartment_id
-                            HAVING others_reviews.apartment_id NOT IN (SELECT apartment_id FROM reviews WHERE customer_id ={id})) as T
+                            GROUP BY others_reviews.apartment_id) as T
                         USING(id)'''.format(id=customer_id))
     _, entries, _ = run_query(query)
     return [(Apartment(id=entry['id'], address=entry['address'], city=entry['city'], country=entry['country'], size=entry['size']), float(entry['approx'])) for entry in entries]

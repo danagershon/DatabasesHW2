@@ -90,7 +90,10 @@ def create_tables():
                     "FOREIGN KEY (apartment_id) REFERENCES Apartment(id) ON DELETE CASCADE);"
 
     apartment_rating_view = "CREATE VIEW ApartmentRating AS " \
-                            "SELECT apartment_id, AVG(rating) AS average_rating FROM Reviews GROUP BY apartment_id;"
+                            "SELECT Apartment.id AS apartment_id, COALESCE(AVG(Reviews.rating), 0) AS average_rating " \
+                            "FROM Apartment LEFT OUTER JOIN Reviews ON Apartment.id = Reviews.apartment_id " \
+                            "GROUP BY Apartment.id;"
+
     rating_ratio_view = '''CREATE VIEW rating_ratio AS SELECT AVG(to_customer.rating::float/from_customer.rating::float) as rating_ratio, from_customer.customer_id as "from_customer", to_customer.customer_id as "to_customer" FROM
                         reviews as from_customer
                         JOIN reviews as to_customer
@@ -394,10 +397,10 @@ def get_apartment_rating(apartment_id: int) -> float:
 
     num_rows_effected, entries, return_val = run_query(query)
 
-    if num_rows_effected == 0:  # apartment id does not exist / does not have reviews
+    if num_rows_effected == 0:  # apartment id does not exist
         return 0
 
-    entry = entries[0]  # expect 1 row for the apartment
+    entry = entries[0]  # expect 1 row for the apartment (in the case of no reviews, 0 rating is returned)
 
     return entry['average_rating']
 
